@@ -1,160 +1,275 @@
-Sub MismatchModel01()
+Sub ValidateAllVerdicts()
+
     Dim ws As Worksheet
     Set ws = ActiveSheet
 
-    Dim lastRow As Long, i As Long
-    Dim tenantPNCol As Long, sourcePNCol As Long
-    Dim tenantSDCol As Long, sourceSDCol As Long
-    Dim tenantLDCol As Long, sourceLDCol As Long
-    Dim itemIDCol As Long
-    Dim serialNum As Long
-    Dim tenantPrimaryCol As Long
-    Dim sourcePrimaryCol As Long
-    
-    ' Find column Headers
-    tenantPNCol = ws.Rows(1).Find("tenant_product_name").Column
-    sourcePNCol = ws.Rows(1).Find("source_product_name").Column
-    tenantSDCol = ws.Rows(1).Find("tenant_short_description").Column
-    sourceSDCol = ws.Rows(1).Find("source_short_description").Column
-    tenantLDCol = ws.Rows(1).Find("tenant_long_description").Column
-    sourceLDCol = ws.Rows(1).Find("source_long_description").Column
-    
-    ' Item ID section
-    
-    
-    
-    itemIDCol = ws.Rows(1).Find("item_id").Column
-    serialNum = ws.Rows(1).Find("Sl No.").Column
-    
-    ' Primary Image Sections
-    tenantPrimaryCol = ws.Rows(1).Find("tenant_primary_image").Column
-    sourcePrimaryCol = ws.Rows(1).Find("source_primary_image").Column
-  
+    Dim lastRow As Long
+    lastRow = ws.Cells(ws.Rows.count, 1).End(xlUp).row
 
-    lastRow = ws.Cells(ws.Rows.Count, itemIDCol).End(xlUp).Row
-    
-    '!!! Warning !!!
-    '!!! Don't change anything !!!
+    ' ------------------ COLUMN INDEX MAPPING ------------------
+    Dim colTenantVerdict As Long: colTenantVerdict = GetCol(ws, "Tenant verdict")
+    Dim colTenantAttr As Long: colTenantAttr = GetCol(ws, "Attribute", colTenantVerdict)
+    Dim colTenantOtherAttr As Long: colTenantOtherAttr = GetCol(ws, "Other attribute", colTenantVerdict)
+    Dim colTenantErrType As Long: colTenantErrType = GetCol(ws, "tenant verdict error type")
+    Dim colTenantComments As Long: colTenantComments = GetCol(ws, "Conflict comments", colTenantVerdict)
+
+    Dim colSourceVerdict As Long: colSourceVerdict = GetCol(ws, "Source verdict")
+    Dim colSourceAttr As Long: colSourceAttr = GetCol(ws, "Attribute", colSourceVerdict)
+    Dim colSourceOtherAttr As Long: colSourceOtherAttr = GetCol(ws, "Other attribute", colSourceVerdict)
+    Dim colSourceErrType As Long: colSourceErrType = GetCol(ws, "Source verdict error type")
+    Dim colSourceComments As Long: colSourceComments = GetCol(ws, "Conflict comments", colSourceVerdict)
+
+    Dim colTVSVerdict As Long: colTVSVerdict = GetCol(ws, "Tenant vs Source Verdict")
+    Dim colTVSAttr As Long: colTVSAttr = GetCol(ws, "Attribute", colTVSVerdict)
+    Dim colTVSOtherAttr As Long: colTVSOtherAttr = GetCol(ws, "Other Attribute Name")
+    Dim colTVSErrType As Long: colTVSErrType = GetCol(ws, "Tenant vs Source verdict error type")
+    Dim colTVSComments As Long: colTVSComments = GetCol(ws, "Tenant vs Source verdict Comments")
+
+    Dim colTenantImgValid As Long: colTenantImgValid = GetCol(ws, "Image validation", colTenantVerdict)
+    Dim colSourceImgValid As Long: colSourceImgValid = GetCol(ws, "Image validation", colSourceVerdict)
+    Dim colTenantImageValid As Long: colTenantImageValid = GetCol(ws, "Image validation", colTenantVerdict)
+Dim colSourceImageValid As Long: colSourceImageValid = GetCol(ws, "Image validation", colSourceVerdict)
+
+
+    ' ------------------ PROCESS ROWS ------------------
+    Dim i As Long
+    Dim errorCount As Long: errorCount = 0
+
     For i = 2 To lastRow
-        Dim tenantPN As String, sourcePN As String
-        Dim tenantSD As String, sourceSD As String
-        Dim tenantLD As String, sourceLD As String
-        Dim tenantPrimary As String, tenantSecondary As String
-        Dim sourcePrimary As String, sourceSecondary As String
-        Dim itemID As String
-        Dim serial As Long
-tenantPN = HighlightTerms(ws.Cells(i, tenantPNCol).Value, ws.Cells(i, sourcePNCol).Value)
-sourcePN = HighlightTerms(ws.Cells(i, sourcePNCol).Value, ws.Cells(i, tenantPNCol).Value)
+        ' Validate Tenant Verdict
+        errorCount = errorCount + ValidateSection(ws, i, colTenantVerdict, colTenantAttr, colTenantOtherAttr, colTenantErrType, colTenantComments)
 
-tenantSD = HighlightTerms(ws.Cells(i, tenantSDCol).Value, ws.Cells(i, sourceSDCol).Value)
-sourceSD = HighlightTerms(ws.Cells(i, sourceSDCol).Value, ws.Cells(i, tenantSDCol).Value)
+        ' Validate Source Verdict
+        errorCount = errorCount + ValidateSection(ws, i, colSourceVerdict, colSourceAttr, colSourceOtherAttr, colSourceErrType, colSourceComments)
 
-tenantLD = HighlightTerms(ws.Cells(i, tenantLDCol).Value, ws.Cells(i, sourceLDCol).Value)
-sourceLD = HighlightTerms(ws.Cells(i, sourceLDCol).Value, ws.Cells(i, tenantLDCol).Value)
+        ' Verdict value capture
+        Dim tenantVerdict As String: tenantVerdict = Trim(ws.Cells(i, colTenantVerdict).Value)
+        Dim sourceVerdict As String: sourceVerdict = Trim(ws.Cells(i, colSourceVerdict).Value)
+        Dim tvsVerdict As String: tvsVerdict = Trim(ws.Cells(i, colTVSVerdict).Value)
 
-itemID = ws.Cells(i, itemIDCol).Value
+        ' Rule: If any verdict is "Unable to validate", TVS must be "Unable to validate"
+        If tenantVerdict = "Unable to validate" Or sourceVerdict = "Unable to validate" Then
+            If tvsVerdict <> "Unable to validate" Then
+                Highlight ws, i, colTVSVerdict: errorCount = errorCount + 1
+            End If
+        End If
 
-                serial = ws.Cells(i, serialNum).Value
+        ' Rule: Comments required if verdict is "Unable to validate"
+        If tenantVerdict = "Unable to validate" And Trim(ws.Cells(i, colTenantComments).Value) = "" Then
+            Highlight ws, i, colTenantComments: errorCount = errorCount + 1
+        End If
+        If sourceVerdict = "Unable to validate" And Trim(ws.Cells(i, colSourceComments).Value) = "" Then
+            Highlight ws, i, colSourceComments: errorCount = errorCount + 1
+        End If
+        If tvsVerdict = "Unable to validate" And Trim(ws.Cells(i, colTVSComments).Value) = "" Then
+            Highlight ws, i, colTVSComments: errorCount = errorCount + 1
+        End If
 
-        tenantPrimary = Replace(Replace(Replace(ws.Cells(i, tenantPrimaryCol).Value, "[", ""), "]", ""), "'", "")
-        sourcePrimary = Replace(Replace(Replace(ws.Cells(i, sourcePrimaryCol).Value, "[", ""), "]", ""), "'", "")
-      
-        Dim tpImages As String, tsImages As String
-        Dim spImages As String, ssImages As String
-        Dim urls() As String, j As Long
+        ' ----------- TVS Verdict Decision Rules -------------
+        If LCase(tenantVerdict) = "no conflict" And LCase(sourceVerdict) = "no conflict" Then
+            If tvsVerdict = "" Then
+                Highlight ws, i, colTVSVerdict: errorCount = errorCount + 1
+            Else
+                errorCount = errorCount + ValidateTVSSection(ws, i, colTVSVerdict, colTVSAttr, colTVSOtherAttr, colTVSErrType, colTVSComments)
+            End If
 
-        ' Tenant Primary Images
-        urls = Split(tenantPrimary, ",")
-        tpImages = "<div style='display:flex; flex-wrap:wrap;'>"
-        For j = LBound(urls) To UBound(urls)
-            tpImages = tpImages & "<div style='flex:1 0 21%; margin:5px;'><img src='" & Trim(urls(j)) & "' style='height:300px; width:300px;' alt='Tenant Primary " & (j + 1) & "'></div>"
-        Next j
-        tpImages = tpImages & "</div>"
+        ElseIf LCase(tenantVerdict) = "no conflict" And sourceVerdict <> "" And LCase(sourceVerdict) <> "no conflict" Then
+            If tvsVerdict <> "" Then Highlight ws, i, colTVSVerdict: errorCount = errorCount + 1
 
-        ' Tenant Secondary Images
-        urls = Split(tenantSecondary, ",")
-        tsImages = "<div style='display:flex; flex-wrap:wrap;'>"
-        For j = LBound(urls) To UBound(urls)
-            tsImages = tsImages & "<div style='flex:1 0 21%; margin:5px;'><img src='" & Trim(urls(j)) & "' style='height:300px; width:300px;' alt='Tenant Secondary " & (j + 1) & "'></div>"
-        Next j
-        tsImages = tsImages & "</div>"
+        ElseIf LCase(sourceVerdict) = "no conflict" And tenantVerdict <> "" And LCase(tenantVerdict) <> "no conflict" Then
+            If tvsVerdict <> "" Then Highlight ws, i, colTVSVerdict: errorCount = errorCount + 1
 
-        ' Source Primary Images
-        urls = Split(sourcePrimary, ",")
-        spImages = "<div style='display:flex; flex-wrap:wrap;'>"
-        For j = LBound(urls) To UBound(urls)
-            spImages = spImages & "<div style='flex:1 0 21%; margin:5px;'><img src='" & Trim(urls(j)) & "' style='height:350px; width:350px;' alt='Source Primary " & (j + 1) & "'></div>"
-        Next j
-        spImages = spImages & "</div>"
+        ElseIf tenantVerdict <> "" And sourceVerdict <> "" And _
+               LCase(tenantVerdict) <> "no conflict" And LCase(sourceVerdict) <> "no conflict" And _
+               tenantVerdict <> "Unable to validate" And sourceVerdict <> "Unable to validate" Then
+            If tvsVerdict <> "" Then Highlight ws, i, colTVSVerdict: errorCount = errorCount + 1
 
-        ' Source Secondary Images
-        urls = Split(sourceSecondary, ",")
-        ssImages = "<div style='display:flex; flex-wrap:wrap;'>"
-        For j = LBound(urls) To UBound(urls)
-            ssImages = ssImages & "<div style='flex:1 0 21%; margin:5px;'><img src='" & Trim(urls(j)) & "' style='height:350px; width:350px;' alt='Source Secondary " & (j + 1) & "'></div>"
-        Next j
-        ssImages = ssImages & "</div>"
+        ElseIf tenantVerdict <> "" And sourceVerdict <> "" Then
+            errorCount = errorCount + ValidateTVSSection(ws, i, colTVSVerdict, colTVSAttr, colTVSOtherAttr, colTVSErrType, colTVSComments)
 
-        ' Create the HTML table
-        Dim result As String
-        result = "<table border='1' style='width:100%; border-collapse:collapse; table-layout:fixed; font-family:Poppins, sans-serif; font-weight:500; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); border-radius: 8px; overflow: hidden; background-color:#2c2c2c; color:#e0e0e0;margin-bottom:20px;'>" & _
-                 "<tr style='background-color:#1a1a1a; color:#ffffff; text-align:center;'>" & _
-                 "<th colspan='2' style='padding:10px;'><h3>Row No: " & i & "</h3><h3>Serial No: " & serial & "</h3><h4>Item ID: " & itemID & "</h4></th></tr>" & _
-                 "<tr style='background-color:#333333; text-align:center;'>" & _
-                 "<th style='padding:5px;'>Tenant PN</th><th style='padding:5px;'>Source PN</th></tr>" & _
-                 "<tr><td style='padding:5px;'>" & tenantPN & "</td><td style='padding:5px;'>" & sourcePN & "</td></tr>" & _
-                 "<tr style='background-color:#333333; text-align:center;'>" & _
-                 "<th style='padding:5px;'>Tenant SD</th><th style='padding:5px;'>Source SD</th></tr>" & _
-                 "<tr><td style='padding:5px;'>" & tenantSD & "</td><td style='padding:5px;'>" & sourceSD & "</td></tr>" & _
-                 "<tr style='background-color:#333333; text-align:center;'>" & _
-                 "<th style='padding:5px;'>Tenant LD</th><th style='padding:5px;'>Source LD</th></tr>" & _
-                 "<tr><td style='padding:5px;'>" & tenantLD & "</td><td style='padding:5px;'>" & sourceLD & "</td></tr>" & _
-                 "<tr style='background-color:#1a1a1a; color:#ffffff; text-align:center;'>" & _
-                 "<th style='padding:5px;'>Tnt Primary Images</th><th style='padding:5px;'>Src Primary Image</th></tr>" & _
-                 "<th style='padding:10px;'>" & tpImages & "</th><th style='padding:10px;'>" & spImages & "</th></tr>" & _
-                 "<tr style='background-color:#1a1a1a; color:#ffffff; text-align:center;'>" & _
-                 "</table>"
+        Else
+            ClearHighlight ws, i, colTVSAttr
+            ClearHighlight ws, i, colTVSOtherAttr
+            ClearHighlight ws, i, colTVSErrType
+            ClearHighlight ws, i, colTVSComments
+        End If
 
-        ' Output Column
-        ws.Cells(i, "AJ").Value = result
+' ------------------ IMAGE VALIDATION (Tenant & Source) ------------------
+Dim tenantImgValidRaw As String: tenantImgValidRaw = LCase(Trim(ws.Cells(i, colTenantImageValid).Value))
+Dim sourceImgValidRaw As String: sourceImgValidRaw = LCase(Trim(ws.Cells(i, colSourceImageValid).Value))
+
+
+
+Dim normTenantImgValid As String: normTenantImgValid = NormalizeImageValidation(tenantImgValidRaw)
+Dim normSourceImgValid As String: normSourceImgValid = NormalizeImageValidation(sourceImgValidRaw)
+
+' --- Tenant Image Validation ---
+If normTenantImgValid <> "" Then
+    ws.Cells(i, colTenantImageValid).Value = normTenantImgValid
+    ws.Cells(i, colTenantImageValid).Interior.ColorIndex = xlNone
+Else
+    Highlight ws, i, colTenantImageValid
+    errorCount = errorCount + 1
+End If
+
+' --- Source Image Validation ---
+If normSourceImgValid <> "" Then
+    ws.Cells(i, colSourceImageValid).Value = normSourceImgValid
+    ws.Cells(i, colSourceImageValid).Interior.ColorIndex = xlNone
+Else
+    Highlight ws, i, colSourceImageValid
+    errorCount = errorCount + 1
+End If
+
+
+
     Next i
+
+  MsgBox "Verdict Validation Complete " & vbCrLf & vbCrLf & _
+       "Total Errors Highlighted: " & errorCount & vbCrLf & vbCrLf & _
+       "Check the red-highlighted cells for issues.", _
+       vbInformation + vbOKOnly, " Validation Summary"
+
+
 End Sub
 
-
-
-
-
-
-
-
-Function HighlightTerms(tenantText As String, sourceText As String) As String
-    Dim words() As Variant
-    Dim word As Variant
-    Dim highlightedText As String
-    highlightedText = tenantText
-
-    ' Split tenant text into words
-    words = Split(tenantText, " ")
-
-    ' Loop through each word and check if it exists in source text
-    For Each word In words
-        If InStr(1, sourceText, word, vbTextCompare) > 0 Then
-            highlightedText = Replace(highlightedText, word, "<span style='background-color:yellow;'>" & word & "</span>", , , vbTextCompare)
-        End If
-    Next word
-
-    HighlightTerms = highlightedText
+' --- Helper Function to Normalize Value ---
+Function NormalizeImageValidation(val As String) As String
+    Select Case val
+        Case "yes"
+            NormalizeImageValidation = "Yes"
+        Case "unable to validate", "unble to validate", "unable to validte", "unable validate", "unabl"
+            NormalizeImageValidation = "Unable to validate"
+        Case Else
+            NormalizeImageValidation = ""
+    End Select
 End Function
 
 
+' ------------------ TENANT/SOURCE ------------------
+Function ValidateSection(ws As Worksheet, rowNum As Long, _
+    colVerdict As Long, colAttr As Long, colOtherAttr As Long, _
+    colErrType As Long, colComment As Long) As Long
+
+    Dim errorCount As Long: errorCount = 0
+
+    Dim verdict As String
+    verdict = Trim(ws.Cells(rowNum, colVerdict).Value)
+
+    Dim attrVal As String: attrVal = Trim(ws.Cells(rowNum, colAttr).Value)
+    Dim otherAttrVal As String: otherAttrVal = Trim(ws.Cells(rowNum, colOtherAttr).Value)
+    Dim errTypeVal As String: errTypeVal = Trim(ws.Cells(rowNum, colErrType).Value)
+    Dim commentVal As String: commentVal = Trim(ws.Cells(rowNum, colComment).Value)
+
+    ' Clear previous highlights
+    ClearHighlight ws, rowNum, colAttr
+    ClearHighlight ws, rowNum, colOtherAttr
+    ClearHighlight ws, rowNum, colErrType
+    ClearHighlight ws, rowNum, colComment
+
+    If verdict = "" Then
+        Highlight ws, rowNum, colVerdict: errorCount = errorCount + 1
+        Highlight ws, rowNum, colAttr: errorCount = errorCount + 1
+        Highlight ws, rowNum, colOtherAttr: errorCount = errorCount + 1
+        Highlight ws, rowNum, colErrType: errorCount = errorCount + 1
+        Highlight ws, rowNum, colComment: errorCount = errorCount + 1
+
+       ElseIf verdict = "Unable to validate" Then
+        If attrVal <> "" Then Highlight ws, rowNum, colAttr: errorCount = errorCount + 1
+        If otherAttrVal <> "" Then Highlight ws, rowNum, colOtherAttr: errorCount = errorCount + 1
+        If errTypeVal <> "" Then Highlight ws, rowNum, colErrType: errorCount = errorCount + 1
+        If commentVal = "" Then Highlight ws, rowNum, colComment: errorCount = errorCount + 1
+
+    ElseIf verdict = "No conflict" Then
+        If attrVal <> "" Then Highlight ws, rowNum, colAttr: errorCount = errorCount + 1
+        If otherAttrVal <> "" Then Highlight ws, rowNum, colOtherAttr: errorCount = errorCount + 1
+        If errTypeVal <> "" Then Highlight ws, rowNum, colErrType: errorCount = errorCount + 1
+        If commentVal <> "" Then Highlight ws, rowNum, colComment: errorCount = errorCount + 1
+
+    Else
+        If attrVal = "" Then Highlight ws, rowNum, colAttr: errorCount = errorCount + 1
+        If errTypeVal = "" Then Highlight ws, rowNum, colErrType: errorCount = errorCount + 1
+        If commentVal = "" Then Highlight ws, rowNum, colComment: errorCount = errorCount + 1
+        If LCase(attrVal) = "other_attribute" And otherAttrVal = "" Then
+            Highlight ws, rowNum, colOtherAttr: errorCount = errorCount + 1
+        End If
+    End If
+
+    ValidateSection = errorCount
+
+End Function
+
+' ------------------ TVS CUSTOM LOGIC ------------------
+Function ValidateTVSSection(ws As Worksheet, rowNum As Long, _
+    colVerdict As Long, colAttr As Long, colOtherAttr As Long, _
+    colErrType As Long, colComment As Long) As Long
+
+    Dim errorCount As Long: errorCount = 0
+
+    Dim verdict As String: verdict = Trim(ws.Cells(rowNum, colVerdict).Value)
+    Dim attrVal As String: attrVal = Trim(ws.Cells(rowNum, colAttr).Value)
+    Dim otherAttrVal As String: otherAttrVal = Trim(ws.Cells(rowNum, colOtherAttr).Value)
+    Dim errTypeVal As String: errTypeVal = Trim(ws.Cells(rowNum, colErrType).Value)
+    Dim commentVal As String: commentVal = Trim(ws.Cells(rowNum, colComment).Value)
+
+    ' Clear previous highlights
+    ClearHighlight ws, rowNum, colAttr
+    ClearHighlight ws, rowNum, colOtherAttr
+    ClearHighlight ws, rowNum, colErrType
+    ClearHighlight ws, rowNum, colComment
+
+    If verdict = "" Then
+        Highlight ws, rowNum, colAttr: errorCount = errorCount + 1
+        Highlight ws, rowNum, colOtherAttr: errorCount = errorCount + 1
+        Highlight ws, rowNum, colErrType: errorCount = errorCount + 1
+        Highlight ws, rowNum, colComment: errorCount = errorCount + 1
+
+          ElseIf verdict = "Unable to validate" Then
+        If attrVal <> "" Then Highlight ws, rowNum, colAttr: errorCount = errorCount + 1
+        If otherAttrVal <> "" Then Highlight ws, rowNum, colOtherAttr: errorCount = errorCount + 1
+        If errTypeVal <> "" Then Highlight ws, rowNum, colErrType: errorCount = errorCount + 1
+        If commentVal = "" Then Highlight ws, rowNum, colComment: errorCount = errorCount + 1
+
+    ElseIf verdict = "Match" Then
+        If attrVal <> "" Then Highlight ws, rowNum, colAttr: errorCount = errorCount + 1
+        If otherAttrVal <> "" Then Highlight ws, rowNum, colOtherAttr: errorCount = errorCount + 1
+        If errTypeVal <> "" Then Highlight ws, rowNum, colErrType: errorCount = errorCount + 1
+        If commentVal <> "" Then Highlight ws, rowNum, colComment: errorCount = errorCount + 1
+
+    Else
+        If attrVal = "" Then Highlight ws, rowNum, colAttr: errorCount = errorCount + 1
+        If errTypeVal = "" Then Highlight ws, rowNum, colErrType: errorCount = errorCount + 1
+        If commentVal = "" Then Highlight ws, rowNum, colComment: errorCount = errorCount + 1
+        If LCase(attrVal) = "other_attribute" And otherAttrVal = "" Then
+            Highlight ws, rowNum, colOtherAttr: errorCount = errorCount + 1
+        End If
+    End If
+
+    ValidateTVSSection = errorCount
+
+End Function
 
 
+' ------------------ HELPERS ------------------
+Function GetCol(ws As Worksheet, header As String, Optional afterCol As Long = 0) As Long
+    Dim c As Range
+    For Each c In ws.Rows(1).Cells
+        If c.Column > afterCol And LCase(Trim(c.Value)) = LCase(header) Then
+            GetCol = c.Column
+            Exit Function
+        End If
+    Next
+    MsgBox "Column not found: " & header, vbCritical
+    End
+End Function
 
+Sub Highlight(ws As Worksheet, row As Long, col As Long)
+    ws.Cells(row, col).Interior.Color = RGB(255, 0, 0)
+End Sub
 
-
-
-
-
+Sub ClearHighlight(ws As Worksheet, row As Long, col As Long)
+    ws.Cells(row, col).Interior.ColorIndex = xlNone
+End Sub
 
 
 
